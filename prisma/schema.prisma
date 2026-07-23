@@ -1,0 +1,168 @@
+// Care Medical Group — training platform schema
+// Matches section 4 of the training roadmap.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PRACTITIONER
+  PATIENT
+  INSURANCE_REP
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  DENIED
+  PAID
+}
+
+enum InvoiceStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+}
+
+model Hospital {
+  id           String        @id @default(cuid())
+  name         String
+  city         String?
+  users        User[]
+  appointments Appointment[]
+}
+
+// passwordHash is seeded and ready for Phase 1 (building real login),
+// this demo build itself uses a simplified one-click role login.
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         Role
+  hospitalId   String?
+  hospital     Hospital?     @relation(fields: [hospitalId], references: [id])
+  practitioner Practitioner?
+  patient      Patient?
+  createdAt    DateTime      @default(now())
+}
+
+model Practitioner {
+  id              String        @id @default(cuid())
+  userId          String        @unique
+  user            User          @relation(fields: [userId], references: [id])
+  specialty       String
+  appointments    Appointment[]
+  labTestsOrdered LabTest[]
+}
+
+model Patient {
+  id           String            @id @default(cuid())
+  userId       String            @unique
+  user         User              @relation(fields: [userId], references: [id])
+  dateOfBirth  DateTime?
+  nationalId   String?
+  appointments Appointment[]
+  insurance    PatientInsurance?
+}
+
+model InsuranceProvider {
+  id       String              @id @default(cuid())
+  name     String
+  claims   Claim[]
+  policies PatientInsurance[]
+}
+
+model PatientInsurance {
+  id           String            @id @default(cuid())
+  patientId    String            @unique
+  patient      Patient           @relation(fields: [patientId], references: [id])
+  providerId   String
+  provider     InsuranceProvider @relation(fields: [providerId], references: [id])
+  policyNumber String
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  patientId      String
+  patient        Patient           @relation(fields: [patientId], references: [id])
+  practitionerId String
+  practitioner   Practitioner      @relation(fields: [practitionerId], references: [id])
+  hospitalId     String
+  hospital       Hospital          @relation(fields: [hospitalId], references: [id])
+  datetime       DateTime
+  status         AppointmentStatus @default(REQUESTED)
+  labTests       LabTest[]
+  claim          Claim?
+  invoice        Invoice?
+  createdAt      DateTime          @default(now())
+}
+
+model LabTest {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  testName      String
+  orderedById   String
+  orderedBy     Practitioner @relation(fields: [orderedById], references: [id])
+  result        LabResult?
+  createdAt     DateTime    @default(now())
+}
+
+model LabResult {
+  id             String    @id @default(cuid())
+  labTestId      String    @unique
+  labTest        LabTest   @relation(fields: [labTestId], references: [id])
+  value          String
+  unit           String?
+  referenceRange String?
+  releasedAt     DateTime?
+}
+
+model Claim {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  providerId    String
+  provider      InsuranceProvider @relation(fields: [providerId], references: [id])
+  amount        Float
+  status        ClaimStatus @default(DRAFT)
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  appointmentId String        @unique
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id])
+  amount        Float
+  status        InvoiceStatus @default(PENDING)
+  payments      Payment[]
+  createdAt     DateTime      @default(now())
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  payerType String // "insurance" | "patient"
+  amount    Float
+  paidAt    DateTime @default(now())
+}
